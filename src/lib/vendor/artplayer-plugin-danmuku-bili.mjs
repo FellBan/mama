@@ -565,15 +565,13 @@
               let t = this.art.currentTime - e.time;
               return t > 0.6 && t < s - 0.2;
             });
-            if (t.length > o) {
+            {
               let e = [],
                 i = [...t],
-                a = Array.from({ length: o }, (_, e) => {
-                  let t = e / Math.max(1, o - 1);
-                  return 0.82 - t * 0.62;
-                });
-              for (let t = 0; t < a.length && i.length; t++) {
-                let n = a[t] * s,
+                a = [0.82, 0.52, 0.24],
+                n = Math.min(o * a.length, i.length);
+              for (let t = 0; t < n && i.length; t++) {
+                let n = a[t % a.length] * s,
                   o = 0,
                   l = 1 / 0;
                 for (let e = 0; e < i.length; e++) {
@@ -622,7 +620,7 @@
                   this.setState(l, this.isStop ? 'stop' : 'emit'),
                     (l.$ref.style.top = `${Math.min(
                       a - n,
-                      this.marginTop + (s % o) * n
+                      this.marginTop + Math.floor(s / 3) * n
                     )}px`),
                     (l.$ref.style.visibility = 'visible'),
                     (l.$ref.dataset.mode = l.mode),
