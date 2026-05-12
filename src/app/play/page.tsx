@@ -1607,6 +1607,8 @@ function PlayPageClient() {
   const lastPlaybackRateRef = useRef<number>(loadSavedPlaybackRate());
   // Safari 切集时会短暂把 playbackRate 重置为 1，这里保留一段恢复窗口避免污染记忆值
   const playbackRateRestoreWindowUntilRef = useRef<number>(0);
+  const lastDanmakuTimelineTimeRef = useRef<number>(0);
+  const seekFromTimeRef = useRef<number | null>(null);
 
   // 换源相关状态
   const [availableSources, setAvailableSources] = useState<SearchResult[]>([]);
@@ -2963,6 +2965,9 @@ function PlayPageClient() {
             speed: danmakuPluginOption.speed || currentDanmakuSettings.speed,
             marginTop: (danmakuPluginOption.margin && danmakuPluginOption.margin[0]) ?? currentDanmakuSettings.marginTop,
             marginBottom: (danmakuPluginOption.margin && danmakuPluginOption.margin[1]) ?? currentDanmakuSettings.marginBottom,
+            synchronousPlayback:
+              danmakuPluginOption.synchronousPlayback ??
+              currentDanmakuSettings.synchronousPlayback,
           };
 
           // 保存到 localStorage 和 art.storage
@@ -5998,7 +6003,7 @@ function PlayPageClient() {
         const [ArtplayerModule, HlsModule, DanmukuPlugin] = await Promise.all([
           import('artplayer'),
           import('hls.js'),
-          import('artplayer-plugin-danmuku'),
+          import('@/lib/vendor/artplayer-plugin-danmuku-bili.mjs'),
         ]);
 
         const Artplayer = ArtplayerModule.default;
@@ -6027,6 +6032,22 @@ function PlayPageClient() {
           });
           playerTimeouts.clear();
         };
+        let danmakuRateSyncTimeout: number | null = null;
+        const seekRestoreDanmakuElements = new Set<HTMLElement>();
+        type SeekRestoreDanmakuState = {
+          mode: 'scroll' | 'fixed';
+          removeTimeoutId: number | null;
+          remaining: number;
+          phaseStartedAt: number | null;
+          phaseDuration: number;
+          currentLeft: number;
+          remainingDistance: number;
+          width: number;
+        };
+        const seekRestoreDanmakuStates = new Map<
+          HTMLElement,
+          SeekRestoreDanmakuState
+        >();
 
         const syncPlaybackPitch = () => {
           if (!isWebkit || !artPlayerRef.current?.video) {
@@ -6044,6 +6065,213 @@ function PlayPageClient() {
           if ('webkitPreservesPitch' in video) {
             video.webkitPreservesPitch = shouldPreservePitch;
           }
+        };
+
+        const resyncDanmakuPlaybackRate = () => {
+          clearTrackedTimeout(danmakuRateSyncTimeout);
+
+          danmakuRateSyncTimeout = schedulePlayerTimeout(() => {
+            danmakuRateSyncTimeout = null;
+
+            const art = artPlayerRef.current;
+            const danmakuPlugin = danmakuPluginRef.current;
+
+            if (!art || !danmakuPlugin?.option?.synchronousPlayback) {
+              return;
+            }
+
+            if (
+              !Array.isArray(danmakuPlugin.option.danmuku) ||
+              danmakuPlugin.option.danmuku.length === 0
+            ) {
+              return;
+            }
+
+            danmakuPlugin.load().catch((error: unknown) => {
+              console.warn('同步弹幕播放速度失败:', error);
+            });
+          }, 80);
+        };
+
+        const clearSeekRestoreDanmaku = () => {
+          seekRestoreDanmakuElements.forEach((element) => {
+            const state = seekRestoreDanmakuStates.get(element);
+            if (state) {
+              clearTrackedTimeout(state.removeTimeoutId);
+            }
+            seekRestoreDanmakuStates.delete(element);
+            element.remove();
+          });
+          seekRestoreDanmakuElements.clear();
+        };
+
+        const scheduleSeekRestoreRemoval = (
+          element: HTMLElement,
+          remaining: number
+        ) => {
+          const state = seekRestoreDanmakuStates.get(element);
+          if (!state) {
+            return;
+          }
+
+          clearTrackedTimeout(state.removeTimeoutId);
+          state.removeTimeoutId = schedulePlayerTimeout(() => {
+            seekRestoreDanmakuStates.delete(element);
+            seekRestoreDanmakuElements.delete(element);
+            element.remove();
+          }, remaining * 1000 + 120);
+        };
+
+        const pauseSeekRestoreDanmaku = () => {
+          seekRestoreDanmakuElements.forEach((element) => {
+            const state = seekRestoreDanmakuStates.get(element);
+            if (!state) {
+              return;
+            }
+
+            clearTrackedTimeout(state.removeTimeoutId);
+            state.removeTimeoutId = null;
+
+            if (state.mode === 'fixed') {
+              return;
+            }
+
+            const startedAt = state.phaseStartedAt;
+            const duration = state.phaseDuration;
+            if (startedAt == null || duration <= 0) {
+              return;
+            }
+
+            const elapsed = Math.min(
+              duration,
+              Math.max(0, (performance.now() - startedAt) / 1000)
+            );
+            state.remaining = Math.max(0, duration - elapsed);
+            const progressedDistance = state.remainingDistance * (elapsed / duration);
+            state.currentLeft = state.currentLeft - progressedDistance;
+            state.remainingDistance = Math.max(0, state.currentLeft + state.width);
+            state.phaseStartedAt = null;
+            state.phaseDuration = state.remaining;
+
+            element.style.transition = 'transform 0s linear 0s';
+            element.style.left = `${state.currentLeft}px`;
+            element.style.transform = 'translateX(0px)';
+          });
+        };
+
+        const resumeSeekRestoreDanmaku = () => {
+          seekRestoreDanmakuElements.forEach((element) => {
+            const state = seekRestoreDanmakuStates.get(element);
+            if (!state || state.remaining <= 0) {
+              return;
+            }
+
+            if (state.mode === 'fixed') {
+              scheduleSeekRestoreRemoval(element, state.remaining);
+              return;
+            }
+
+            if (state.remainingDistance <= 0) {
+              seekRestoreDanmakuStates.delete(element);
+              seekRestoreDanmakuElements.delete(element);
+              element.remove();
+              return;
+            }
+
+            scheduleSeekRestoreRemoval(element, state.remaining);
+            element.style.left = `${state.currentLeft}px`;
+            element.style.transform = 'translateX(0px)';
+            element.style.transition = 'transform 0s linear 0s';
+
+            requestAnimationFrame(() => {
+              if (!element.isConnected) {
+                return;
+              }
+
+              const latestState = seekRestoreDanmakuStates.get(element);
+              if (!latestState || latestState.remaining <= 0) {
+                return;
+              }
+
+              latestState.phaseStartedAt = performance.now();
+              latestState.phaseDuration = latestState.remaining;
+              element.style.transition = `transform ${latestState.remaining}s linear 0s`;
+              element.style.transform = `translateX(-${latestState.remainingDistance}px)`;
+            });
+          });
+        };
+
+        const resolveDanmakuMarginPx = (
+          value: number | string | undefined,
+          playerHeight: number,
+          fallback: number
+        ) => {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return Math.max(0, Math.min(playerHeight, value));
+          }
+
+          if (typeof value === 'string' && value.endsWith('%')) {
+            const percent = Number.parseFloat(value);
+            if (Number.isFinite(percent)) {
+              return Math.max(0, Math.min(playerHeight, playerHeight * percent / 100));
+            }
+          }
+
+          return Math.max(0, Math.min(playerHeight, fallback));
+        };
+
+        const resolveDanmakuRestoreDuration = () => {
+          const art = artPlayerRef.current;
+          const danmakuPlugin = danmakuPluginRef.current;
+          const baseSpeed = Number(
+            danmakuPlugin?.option?.speed ?? danmakuSettingsRef.current.speed ?? 5
+          );
+          const safeSpeed = Math.min(10, Math.max(1, baseSpeed));
+          const playbackRate = Number(art?.playbackRate || 1);
+
+          if (
+            danmakuPlugin?.option?.synchronousPlayback &&
+            Number.isFinite(playbackRate) &&
+            playbackRate > 0
+          ) {
+            return Math.max(7.5, safeSpeed / playbackRate);
+          }
+
+          return Math.max(7.5, safeSpeed);
+        };
+
+        const reloadDanmakuTimelineOnSeek = async () => {
+          const danmakuPlugin = danmakuPluginRef.current;
+          if (!danmakuPlugin?.option) {
+            return;
+          }
+
+          clearSeekRestoreDanmaku();
+
+          if (
+            !Array.isArray(danmakuPlugin.option.danmuku) ||
+            danmakuPlugin.option.danmuku.length === 0
+          ) {
+            return;
+          }
+
+          try {
+            await danmakuPlugin.load();
+          } catch (error) {
+            console.warn('seek 后重建弹幕时间线失败:', error);
+          }
+        };
+
+        const restoreSeekContextDanmaku = () => {
+          clearSeekRestoreDanmaku();
+          const danmakuPlugin = danmakuPluginRef.current;
+          if (!danmakuPlugin?.restore) {
+            return;
+          }
+
+          danmakuPlugin.restore().catch((error: unknown) => {
+            console.warn('seek 后恢复可见弹幕失败:', error);
+          });
         };
 
         const shouldRescueWebkitHls = (
@@ -7177,6 +7405,7 @@ function PlayPageClient() {
         });
 
         artPlayerRef.current.on('destroy', () => {
+          clearSeekRestoreDanmaku();
           clearPlayerTimeouts();
         });
 
@@ -7459,6 +7688,9 @@ function PlayPageClient() {
                   speed: danmakuPluginRef.current.option.speed || danmakuSettingsRef.current.speed,
                   marginTop: (danmakuPluginRef.current.option.margin && danmakuPluginRef.current.option.margin[0]) ?? danmakuSettingsRef.current.marginTop,
                   marginBottom: (danmakuPluginRef.current.option.margin && danmakuPluginRef.current.option.margin[1]) ?? danmakuSettingsRef.current.marginBottom,
+                  synchronousPlayback:
+                    danmakuPluginRef.current.option.synchronousPlayback ??
+                    danmakuSettingsRef.current.synchronousPlayback,
                 };
 
                 // 保存到 localStorage 和 art.storage
@@ -7500,9 +7732,11 @@ function PlayPageClient() {
         // 监听播放状态变化，控制 Wake Lock
         artPlayerRef.current.on('play', () => {
           requestWakeLock();
+          resumeSeekRestoreDanmaku();
         });
 
         artPlayerRef.current.on('pause', () => {
+          pauseSeekRestoreDanmaku();
           releaseWakeLock();
           saveCurrentPlayProgress();
         });
@@ -7546,6 +7780,22 @@ function PlayPageClient() {
           lastPlaybackRateRef.current = currentRate;
           persistPlaybackRate(currentRate);
           syncPlaybackPitch();
+          clearSeekRestoreDanmaku();
+          resyncDanmakuPlaybackRate();
+        });
+        artPlayerRef.current.on('video:timeupdate', () => {
+          if (!artPlayerRef.current?.video?.seeking) {
+            lastDanmakuTimelineTimeRef.current = artPlayerRef.current.currentTime || 0;
+          }
+        });
+        artPlayerRef.current.on('video:seeking', () => {
+          seekFromTimeRef.current = lastDanmakuTimelineTimeRef.current;
+          clearSeekRestoreDanmaku();
+        });
+        artPlayerRef.current.on('video:seeked', async () => {
+          await reloadDanmakuTimelineOnSeek();
+          restoreSeekContextDanmaku();
+          seekFromTimeRef.current = artPlayerRef.current?.currentTime || 0;
         });
         artPlayerRef.current.on('video:playing', () => {
           if (

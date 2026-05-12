@@ -273,7 +273,7 @@ export const DEFAULT_DANMAKU_SETTINGS: DanmakuSettings = {
   maxlength: 100,
   filterRules: [],
   unlimited: false,
-  synchronousPlayback: false,
+  synchronousPlayback: true,
 };
 
 // 从 localStorage 读取弹幕设置
