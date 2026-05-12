@@ -563,8 +563,14 @@
               .filter((e) => {
                 let t = this.art.currentTime - e.time;
                 return t > 0.6 && t < this.speed - 0.2;
-              })
-              .slice(-o);
+              });
+            if (t.length > o) {
+              let e = [];
+              for (let i = 0; i < o; i++) {
+                e.push(t[Math.round((i * (t.length - 1)) / Math.max(1, o - 1))]);
+              }
+              t = e;
+            }
             if (!t.length) return this;
 
             for (let s = 0; s < t.length; s++) {
