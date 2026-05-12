@@ -566,10 +566,21 @@
               return t > 0.6 && t < s - 0.2;
             });
             if (t.length > o) {
-              let e = [];
-              for (let i = 0; i < o; i++) {
-                let a = Math.pow(i / Math.max(1, o - 1), 1.45);
-                e.push(t[Math.round(a * (t.length - 1))]);
+              let e = [],
+                i = [...t],
+                a = Array.from({ length: o }, (_, e) => {
+                  let t = e / Math.max(1, o - 1);
+                  return 0.82 - t * 0.62;
+                });
+              for (let t = 0; t < a.length && i.length; t++) {
+                let n = a[t] * s,
+                  o = 0,
+                  l = 1 / 0;
+                for (let e = 0; e < i.length; e++) {
+                  let t = Math.abs(this.art.currentTime - i[e].time - n);
+                  t < l && ((l = t), (o = e));
+                }
+                e.push(i[o]), i.splice(o, 1);
               }
               t = e;
             }
