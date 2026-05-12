@@ -296,14 +296,15 @@
           }
           get restoreReadys() {
             let e = this.art.currentTime,
-              t = [];
+              t = [],
+              i = Math.max(8, this.speed);
             return (
-              this.filter('wait', (i) => {
-                e > i.time &&
-                  e - i.time < this.speed &&
-                  e - i.time > 0.1 &&
-                  0 === i.mode &&
-                  t.push(i);
+              this.filter('wait', (a) => {
+                e > a.time &&
+                  e - a.time < i &&
+                  e - a.time > 0.1 &&
+                  0 === a.mode &&
+                  t.push(a);
               }),
               t.sort((e, t) => e.time - t.time)
             );
@@ -555,15 +556,15 @@
               o = Math.max(
                 1,
                 Math.min(
-                  12,
+                  14,
                   Math.floor((a - this.marginTop - this.marginBottom) / n)
                 )
-              );
-            t = t
-              .filter((e) => {
-                let t = this.art.currentTime - e.time;
-                return t > 0.6 && t < this.speed - 0.2;
-              });
+              ),
+              s = Math.max(8, this.speed);
+            t = t.filter((e) => {
+              let t = this.art.currentTime - e.time;
+              return t > 0.6 && t < s - 0.2;
+            });
             if (t.length > o) {
               let e = [];
               for (let i = 0; i < o; i++) {
@@ -577,7 +578,7 @@
             for (let s = 0; s < t.length; s++) {
               let l = t[s],
                 d = this.art.currentTime - l.time;
-              if (!(d >= this.speed) && !(d <= 0))
+              if (!(d >= Math.max(8, this.speed)) && !(d <= 0))
                 if (await this.option.beforeVisible(l)) {
                   (l.$ref = this.$ref),
                     (l.$ref.textContent = l.text),
@@ -593,10 +594,13 @@
                       : null),
                     e(l.$ref, l.style),
                     (l.$lastStartTime = Date.now()),
-                    (l.$restTime = Math.max(0.01, this.speed - d));
+                    (l.$restTime = Math.max(0.01, Math.max(8, this.speed) - d));
 
                   let p = i + l.$ref.clientWidth,
-                    u = Math.min(0.999, Math.max(0, d / this.speed)),
+                    u = Math.min(
+                      0.999,
+                      Math.max(0, d / Math.max(8, this.speed))
+                    ),
                     h = p * u,
                     m = p - h;
                   if (m <= 0) {
