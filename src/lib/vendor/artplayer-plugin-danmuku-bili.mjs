@@ -155,6 +155,8 @@
               (this.isHide = !1),
               (this.timer = null),
               (this.index = 0),
+              (this.wasPageHidden = !1),
+              (this.isVisibilityRestoring = !1),
               (this.option = r.option),
               (this.states = { wait: [], ready: [], emit: [], stop: [] }),
               this.config(t, !0);
@@ -166,6 +168,7 @@
               (this.stop = this.stop.bind(this)),
               (this.reset = this.reset.bind(this)),
               (this.resize = this.resize.bind(this)),
+              (this.onVisibilityChange = this.onVisibilityChange.bind(this)),
               (this.destroy = this.destroy.bind(this)),
               e.on('video:play', this.start),
               e.on('video:playing', this.start),
@@ -173,6 +176,11 @@
               e.on('video:waiting', this.stop),
               e.on('destroy', this.destroy),
               e.on('resize', this.resize),
+              'undefined' != typeof document &&
+                document.addEventListener(
+                  'visibilitychange',
+                  this.onVisibilityChange
+                ),
               this.load();
           }
           static get option() {
@@ -640,6 +648,26 @@
             }
             return this;
           }
+          onVisibilityChange() {
+            if ('undefined' == typeof document) return;
+            if ('hidden' === document.visibilityState)
+              return (this.wasPageHidden = !0), this.stop(), this;
+            if (!this.wasPageHidden || this.isVisibilityRestoring) return this;
+            return (
+              (this.wasPageHidden = !1),
+              (this.isVisibilityRestoring = !0),
+              this.load()
+                .then(() => this.restore())
+                .catch((e) => {
+                  this.art.emit('artplayerPluginDanmuku:error', e);
+                })
+                .finally(() => {
+                  (this.isVisibilityRestoring = !1),
+                    this.art.playing ? this.start() : this.stop();
+                }),
+              this
+            );
+          }
           resize() {
             let { clientWidth: e } = this.$player;
             this.filter('stop', (t) => {
@@ -731,6 +759,11 @@
           destroy() {
             this.stop(),
               this.worker.terminate(),
+              'undefined' != typeof document &&
+                document.removeEventListener(
+                  'visibilitychange',
+                  this.onVisibilityChange
+                ),
               this.art.off('video:play', this.start),
               this.art.off('video:playing', this.start),
               this.art.off('video:pause', this.stop),
