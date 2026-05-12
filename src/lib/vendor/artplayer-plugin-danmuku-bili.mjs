@@ -548,97 +548,74 @@
             let { setStyles: e } = this.utils,
               t = this.restoreReadys;
             if (!t.length) return this;
-            let i = Math.max(
-              12,
-              Math.min(
-                28,
-                Math.floor(
-                  this.$player.clientHeight /
-                    Math.max(20, Math.round(this.fontSize * 1.4))
-                ) * 2
-              )
-            );
-            t = t.slice(-i);
-            for (let i = 0; i < t.length; i++) {
-              let a = t[i],
-                n = this.art.currentTime - a.time;
-              if (!(n >= this.speed) && !(n <= 0))
-                if (await this.option.beforeVisible(a)) {
-                  let { clientWidth: t, clientHeight: i } = this.$player;
-                  (a.$ref = this.$ref),
-                    (a.$ref.textContent = a.text),
-                    this.$danmuku.appendChild(a.$ref),
-                    (a.$ref.style.opacity = this.option.opacity),
-                    (a.$ref.style.fontSize = `${this.fontSize}px`),
-                    (a.$ref.style.color = a.color),
-                    (a.$ref.style.border = a.border
-                      ? `1px solid ${a.color}`
+
+            let i = this.$player.clientWidth,
+              a = this.$player.clientHeight,
+              n = Math.max(28, Math.round(this.fontSize * 1.45)),
+              o = Math.max(
+                1,
+                Math.min(
+                  10,
+                  Math.floor((a - this.marginTop - this.marginBottom) / n)
+                )
+              );
+            t = t
+              .filter((e) => {
+                let t = this.art.currentTime - e.time;
+                return t > 0.6 && t < this.speed - 0.2;
+              })
+              .slice(-o);
+            if (!t.length) return this;
+
+            for (let s = 0; s < t.length; s++) {
+              let l = t[s],
+                d = this.art.currentTime - l.time;
+              if (!(d >= this.speed) && !(d <= 0))
+                if (await this.option.beforeVisible(l)) {
+                  (l.$ref = this.$ref),
+                    (l.$ref.textContent = l.text),
+                    this.$danmuku.appendChild(l.$ref),
+                    (l.$ref.style.opacity = this.option.opacity),
+                    (l.$ref.style.fontSize = `${this.fontSize}px`),
+                    (l.$ref.style.color = l.color),
+                    (l.$ref.style.border = l.border
+                      ? `1px solid ${l.color}`
                       : null),
-                    (a.$ref.style.backgroundColor = a.border
+                    (l.$ref.style.backgroundColor = l.border
                       ? 'rgb(0 0 0 / 50%)'
                       : null),
-                    e(a.$ref, a.style),
-                    (a.$lastStartTime = Date.now()),
-                    (a.$restTime = Math.max(0.01, this.speed - n));
-                  let o = t + a.$ref.clientWidth,
-                    { result: s } = await this.postMessage({
-                      type: 'getDanmuTop',
-                      target: {
-                        mode: a.mode,
-                        height: a.$ref.clientHeight,
-                        speed: o / this.speed,
-                      },
-                      visibles: this.visibles,
-                      antiOverlap: this.option.antiOverlap,
-                      clientWidth: t,
-                      clientHeight: i,
-                      marginBottom: this.marginBottom,
-                      marginTop: this.marginTop,
-                    });
-                  if (a.$ref)
-                    if (void 0 === s)
-                      this.setState(a, 'ready'),
-                        this.$refs.push(a.$ref),
-                        (a.$ref = null);
-                    else {
-                      switch (
-                        (this.setState(a, this.isStop ? 'stop' : 'emit'),
-                        (a.$ref.style.top = `${s}px`),
-                        (a.$ref.style.visibility = 'visible'),
-                        (a.$ref.dataset.mode = a.mode),
-                        (a.$ref.dataset.id = a.id || ''),
-                        a.mode)
-                      ) {
-                        case 0: {
-                          let e = Math.min(0.999, Math.max(0, n / this.speed)),
-                            i = o * e,
-                            s = o - i;
-                          if (s <= 0) {
-                            this.makeWait(a);
-                            break;
-                          }
-                          (a.$ref.style.left = `${t}px`),
-                            (a.$ref.style.marginLeft = '0px'),
-                            (a.$ref.style.transform = `translateX(${-i}px)`),
-                            (a.$ref.style.transition =
-                              'transform 0s linear 0s'),
-                            this.isStop ||
-                              requestAnimationFrame(() => {
-                                a.$ref &&
-                                  ((a.$ref.style.transition = `transform ${a.$restTime}s linear 0s`),
-                                  (a.$ref.style.transform = `translateX(${-o}px)`));
-                              });
-                          break;
-                        }
-                        case 1:
-                        case 2:
-                          (a.$ref.style.left = '50%'),
-                            (a.$ref.style.marginLeft = `-${
-                              a.$ref.clientWidth / 2
-                            }px`);
-                      }
-                      this.art.emit('artplayerPluginDanmuku:visible', a);
-                    }
+                    e(l.$ref, l.style),
+                    (l.$lastStartTime = Date.now()),
+                    (l.$restTime = Math.max(0.01, this.speed - d));
+
+                  let p = i + l.$ref.clientWidth,
+                    u = Math.min(0.999, Math.max(0, d / this.speed)),
+                    h = p * u,
+                    m = p - h;
+                  if (m <= 0) {
+                    this.makeWait(l);
+                    continue;
+                  }
+
+                  this.setState(l, this.isStop ? 'stop' : 'emit'),
+                    (l.$ref.style.top = `${Math.min(
+                      a - n,
+                      this.marginTop + (s % o) * n
+                    )}px`),
+                    (l.$ref.style.visibility = 'visible'),
+                    (l.$ref.dataset.mode = l.mode),
+                    (l.$ref.dataset.id = l.id || ''),
+                    (l.$ref.style.left = `${i}px`),
+                    (l.$ref.style.marginLeft = '0px'),
+                    (l.$ref.style.transform = `translateX(${-h}px)`),
+                    (l.$ref.style.transition = 'transform 0s linear 0s'),
+                    this.isStop ||
+                      requestAnimationFrame(() => {
+                        l.$ref &&
+                          ((l.$ref.style.transition = `transform ${l.$restTime}s linear 0s`),
+                          (l.$ref.style.transform = `translateX(${-p}px)`));
+                      }),
+                    this.art.emit('artplayerPluginDanmuku:visible', l);
                 }
             }
             return this;
