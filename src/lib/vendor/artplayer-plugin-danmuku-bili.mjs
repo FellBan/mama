@@ -555,7 +555,7 @@
               o = Math.max(
                 1,
                 Math.min(
-                  10,
+                  12,
                   Math.floor((a - this.marginTop - this.marginBottom) / n)
                 )
               );
@@ -567,7 +567,8 @@
             if (t.length > o) {
               let e = [];
               for (let i = 0; i < o; i++) {
-                e.push(t[Math.round((i * (t.length - 1)) / Math.max(1, o - 1))]);
+                let a = Math.pow(i / Math.max(1, o - 1), 1.45);
+                e.push(t[Math.round(a * (t.length - 1))]);
               }
               t = e;
             }
