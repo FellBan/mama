@@ -302,6 +302,7 @@
                 e > i.time &&
                   e - i.time < this.speed &&
                   e - i.time > 0.1 &&
+                  0 === i.mode &&
                   t.push(i);
               }),
               t.sort((e, t) => e.time - t.time)
@@ -547,6 +548,17 @@
             let { setStyles: e } = this.utils,
               t = this.restoreReadys;
             if (!t.length) return this;
+            let i = Math.max(
+              12,
+              Math.min(
+                28,
+                Math.floor(
+                  this.$player.clientHeight /
+                    Math.max(20, Math.round(this.fontSize * 1.4))
+                ) * 2
+              )
+            );
+            t = t.slice(-i);
             for (let i = 0; i < t.length; i++) {
               let a = t[i],
                 n = this.art.currentTime - a.time;
